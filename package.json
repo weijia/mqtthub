@@ -10,5 +10,9 @@
   },
   "devDependencies": {
     "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0",
+    "mqtt": "^5.15.1"
   }
 }
