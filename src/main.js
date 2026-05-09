@@ -1,18 +1,24 @@
 import './chat.css';
 import MQTTChat from './chat.js';
 
-// 页面加载完成后初始化聊天组件
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('MQTT Hub 已加载');
-    
-    // 初始化 MQTT 聊天组件
-    const chat = new MQTTChat();
-    
-    console.log('MQTT Chat 组件已初始化');
-});
+// 确保只初始化一次
+let chatInstance = null;
 
-// 如果 DOM 已经加载完成，立即初始化
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    console.log('MQTT Hub 已加载');
-    new MQTTChat();
+function initChat() {
+    if (chatInstance) {
+        console.log('[Main] Chat already initialized, skipping');
+        return;
+    }
+    console.log('[Main] Initializing MQTT Chat...');
+    chatInstance = new MQTTChat();
+    console.log('[Main] MQTT Chat initialized');
+}
+
+// 页面加载完成后初始化
+if (document.readyState === 'loading') {
+    // DOM 还在加载中，等待 DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', initChat);
+} else {
+    // DOM 已经加载完成，立即初始化
+    initChat();
 }
