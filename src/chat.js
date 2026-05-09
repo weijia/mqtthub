@@ -23,8 +23,14 @@ class MQTTChat {
         this.config = getSavedConfig();
         this.client = null;
         this.clientId = 'mq_' + Math.random().toString(16).slice(2, 8);
-        this.pendingMessages = new Set(); // 用于追踪已发送的消息，防止重复显示
-        console.log('[MQTT Chat] Initializing with clientId:', this.clientId);
+        this.pendingMessages = new Set();
+        this.messageCount = 0;
+        
+        console.log('========== MQTT Chat Debug ==========');
+        console.log('[DEBUG] ClientId:', this.clientId);
+        console.log('[DEBUG] Config:', JSON.stringify(this.config, null, 2));
+        console.log('======================================');
+        
         this.init();
     }
 
@@ -36,7 +42,7 @@ class MQTTChat {
 
     createUI() {
         if (document.getElementById('mqtt-chat')) {
-            console.log('[MQTT Chat] UI already exists');
+            console.log('[DEBUG] UI already exists, skipping creation');
             return;
         }
 
@@ -65,13 +71,13 @@ class MQTTChat {
             </div>
         `;
         document.body.appendChild(main);
-        console.log('[MQTT Chat] UI created');
+        console.log('[DEBUG] UI created successfully');
     }
 
     bindEvents() {
         const main = document.getElementById('mqtt-chat');
         if (!main) {
-            console.error('[MQTT Chat] Main element not found');
+            console.error('[DEBUG] ERROR: Main element not found!');
             return;
         }
 
@@ -80,9 +86,17 @@ class MQTTChat {
         const saveBtn = main.querySelector('#save-config');
         const inputField = main.querySelector('#mqtt-input');
 
+        console.log('[DEBUG] Elements found:', {
+            header: !!header,
+            gearIcon: !!gearIcon,
+            saveBtn: !!saveBtn,
+            inputField: !!inputField
+        });
+
         header.addEventListener('dblclick', () => {
             const currentHeight = main.style.height;
             main.style.height = (currentHeight === '42px') ? '450px' : '42px';
+            console.log('[DEBUG] Toggle height:', main.style.height);
         });
 
         gearIcon.addEventListener('click', (e) => {
@@ -90,6 +104,7 @@ class MQTTChat {
             const panel = main.querySelector('#mqtt-config-panel');
             const isVisible = panel.style.display === 'block';
             panel.style.display = isVisible ? 'none' : 'block';
+            console.log('[DEBUG] Panel toggled:', panel.style.display);
         });
 
         saveBtn.addEventListener('click', () => {
@@ -98,25 +113,35 @@ class MQTTChat {
             this.config.password = main.querySelector('#cfg-pass').value.trim();
             localStorage.setItem('mqtt_chat_config', JSON.stringify(this.config));
             main.querySelector('#mqtt-config-panel').style.display = 'none';
+            console.log('[DEBUG] Config saved:', this.config);
             this.connect();
         });
 
         inputField.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && inputField.value.trim()) {
+                console.log('[DEBUG] Enter pressed, input:', inputField.value.trim());
                 if (!this.client?.connected) {
                     this.displaySystemMessage('⚠️ 未连接到服务器，请稍候...');
+                    console.warn('[DEBUG] Not connected! client.connected:', this.client?.connected);
                     return;
                 }
                 this.sendMessage(inputField.value.trim());
                 inputField.value = '';
             }
         });
+
+        console.log('[DEBUG] Events bound successfully');
     }
 
     connect() {
-        console.log('[MQTT] Connecting to:', this.config.broker);
+        console.log('========== MQTT Connect ==========');
+        console.log('[DEBUG] Broker:', this.config.broker);
+        console.log('[DEBUG] ClientId:', this.clientId);
+        console.log('[DEBUG] Topic:', this.config.topic);
+        console.log('==================================');
         
         if (this.client) {
+            console.log('[DEBUG] Ending previous connection...');
             this.client.end(true);
         }
 
@@ -126,6 +151,7 @@ class MQTTChat {
         }
 
         try {
+            console.log('[DEBUG] Creating MQTT client...');
             this.client = mqtt.connect(this.config.broker, {
                 clientId: this.clientId,
                 reconnectPeriod: 5000,
@@ -133,27 +159,42 @@ class MQTTChat {
                 clean: true
             });
 
-            this.client.on('connect', () => {
-                console.log('[MQTT] Connected to', this.config.broker);
+            console.log('[DEBUG] MQTT client created, binding events...');
+
+            this.client.on('connect', (connack) => {
+                console.log('========== MQTT Connected ==========');
+                console.log('[DEBUG] Broker:', this.config.broker);
+                console.log('[DEBUG] Connack:', connack);
+                
                 const status = document.getElementById('mqtt-status');
                 if (status) {
                     status.className = 'status-dot status-online';
                 }
-                this.client.subscribe(this.config.topic, (err) => {
+                
+                this.client.subscribe(this.config.topic, { qos: 1 }, (err, granted) => {
                     if (err) {
-                        console.error('[MQTT] Subscribe error:', err);
+                        console.error('[DEBUG] Subscribe ERROR:', err);
                     } else {
-                        console.log('[MQTT] Subscribed to:', this.config.topic);
+                        console.log('[DEBUG] Subscribe SUCCESS, granted:', granted);
+                        this.displaySystemMessage('✅ 已连接到 ' + this.config.broker);
                     }
                 });
             });
 
-            this.client.on('message', (topic, payload) => {
+            this.client.on('message', (topic, payload, packet) => {
+                this.messageCount++;
+                console.log('========== MQTT Message Received ==========');
+                console.log('[DEBUG] Message #', this.messageCount);
+                console.log('[DEBUG] Topic:', topic);
+                console.log('[DEBUG] Payload length:', payload.length);
+                console.log('[DEBUG] Payload (first 100 chars):', payload.toString().substring(0, 100));
+                console.log('[DEBUG] Packet:', packet);
+                console.log('==========================================');
                 this.handleMessage(payload.toString());
             });
 
             this.client.on('close', () => {
-                console.log('[MQTT] Connection closed');
+                console.log('[DEBUG] Connection CLOSED');
                 const status = document.getElementById('mqtt-status');
                 if (status) {
                     status.className = 'status-dot';
@@ -161,52 +202,83 @@ class MQTTChat {
             });
 
             this.client.on('error', (err) => {
-                console.error('[MQTT] Error:', err);
+                console.error('[DEBUG] Connection ERROR:', err);
+                this.displaySystemMessage('❌ 连接错误: ' + err.message);
+            });
+
+            this.client.on('offline', () => {
+                console.log('[DEBUG] Client OFFLINE');
+            });
+
+            this.client.on('reconnect', () => {
+                console.log('[DEBUG] Client RECONNECTING...');
             });
 
         } catch (err) {
-            console.error('[MQTT] Connection failed:', err);
+            console.error('[DEBUG] Connection FAILED:', err);
         }
     }
 
     handleMessage(encryptedData) {
+        console.log('========== Handle Message ==========');
+        console.log('[DEBUG] My ClientId:', this.clientId);
+        console.log('[DEBUG] Password used:', this.config.password);
+        console.log('[DEBUG] Encrypted data length:', encryptedData.length);
+        
         try {
+            console.log('[DEBUG] Attempting AES decrypt...');
             const bytes = CryptoJS.AES.decrypt(encryptedData, this.config.password);
+            console.log('[DEBUG] Decrypt bytes result:', bytes.toString());
+            
             const raw = bytes.toString(CryptoJS.enc.Utf8);
+            console.log('[DEBUG] Decrypted raw:', raw ? raw.substring(0, 200) : '(empty)');
             
             if (!raw) {
-                console.warn('[MQTT] Decryption failed - wrong password?');
+                console.error('[DEBUG] DECRYPTION FAILED - raw is empty!');
+                console.error('[DEBUG] This usually means wrong password!');
+                console.error('[DEBUG] Expected password:', this.config.password);
+                this.displaySystemMessage('⚠️ 收到消息但解密失败（密码不匹配？）');
                 return;
             }
 
             const data = JSON.parse(raw);
-            console.log('[MQTT] Message from:', data.user, 'msgId:', data.msgId);
+            console.log('[DEBUG] Parsed data:', JSON.stringify(data, null, 2));
+            console.log('[DEBUG] Sender ID:', data.id);
+            console.log('[DEBUG] My ID:', this.clientId);
+            console.log('[DEBUG] IDs match?', data.id === this.clientId);
             
-            // 检查是否是自己发送的消息（通过 clientId 或 msgId）
+            // 检查是否是自己发送的消息
             if (data.id === this.clientId) {
-                console.log('[MQTT] Ignoring own message');
+                console.log('[DEBUG] >>> IGNORING: This is my own message <<<');
                 return;
             }
 
-            // 检查是否已经显示过这条消息
-            if (this.pendingMessages.has(data.msgId)) {
-                console.log('[MQTT] Message already displayed, skipping');
+            // 检查是否已经显示过
+            if (data.msgId && this.pendingMessages.has(data.msgId)) {
+                console.log('[DEBUG] >>> IGNORING: Message already displayed <<<');
                 return;
             }
 
+            console.log('[DEBUG] >>> DISPLAYING message from:', data.user, '<<<');
             this.displayMessage(data.user, data.msg, false);
+            
         } catch (e) {
-            console.warn('[MQTT] Failed to process message:', e.message);
+            console.error('[DEBUG] Handle message ERROR:', e);
+            console.error('[DEBUG] Error stack:', e.stack);
         }
+        console.log('=====================================');
     }
 
     sendMessage(msg) {
+        console.log('========== Send Message ==========');
+        console.log('[DEBUG] Message to send:', msg);
+        console.log('[DEBUG] Client connected?', this.client?.connected);
+        
         if (!this.client?.connected) {
-            console.warn('[MQTT] Cannot send: not connected');
+            console.error('[DEBUG] Cannot send: not connected');
             return;
         }
 
-        // 生成唯一消息 ID
         const msgId = Date.now() + '_' + Math.random().toString(16).slice(2, 6);
         
         const payload = {
@@ -217,39 +289,57 @@ class MQTTChat {
             time: Date.now()
         };
 
-        const cipher = CryptoJS.AES.encrypt(
-            JSON.stringify(payload),
-            this.config.password
-        ).toString();
+        console.log('[DEBUG] Payload:', JSON.stringify(payload, null, 2));
 
-        // 记录已发送的消息
-        this.pendingMessages.add(msgId);
+        const payloadStr = JSON.stringify(payload);
+        console.log('[DEBUG] Encrypting with password:', this.config.password);
         
-        // 5秒后清理，防止内存泄漏
-        setTimeout(() => {
-            this.pendingMessages.delete(msgId);
-        }, 5000);
+        const cipher = CryptoJS.AES.encrypt(payloadStr, this.config.password).toString();
+        console.log('[DEBUG] Encrypted cipher length:', cipher.length);
+        console.log('[DEBUG] Cipher (first 50 chars):', cipher.substring(0, 50));
 
+        // 记录已发送消息
+        this.pendingMessages.add(msgId);
+        console.log('[DEBUG] Added to pendingMessages:', msgId);
+        console.log('[DEBUG] pendingMessages size:', this.pendingMessages.size);
+
+        // 发布消息
+        console.log('[DEBUG] Publishing to topic:', this.config.topic);
         this.client.publish(this.config.topic, cipher, { qos: 1 }, (err) => {
             if (err) {
-                console.error('[MQTT] Publish error:', err);
+                console.error('[DEBUG] Publish ERROR:', err);
                 this.pendingMessages.delete(msgId);
             } else {
-                console.log('[MQTT] Message published, msgId:', msgId);
+                console.log('[DEBUG] Publish SUCCESS');
             }
         });
 
-        // 立即显示自己发送的消息
+        // 显示自己发送的消息
+        console.log('[DEBUG] Displaying my own message in UI');
         this.displayMessage('我', msg, true);
+        
+        // 5秒后清理
+        setTimeout(() => {
+            console.log('[DEBUG] Cleaning up msgId:', msgId);
+            this.pendingMessages.delete(msgId);
+        }, 5000);
+        
+        console.log('==================================');
     }
 
     displayMessage(user, msg, isSelf) {
+        console.log('[DEBUG] displayMessage called:', { user, msg, isSelf });
+        
         const msgBox = document.getElementById('mqtt-msgs');
-        if (!msgBox) return;
+        if (!msgBox) {
+            console.error('[DEBUG] msgBox not found!');
+            return;
+        }
         
         const msgEl = this.createMsgElement(user, msg, isSelf);
         msgBox.appendChild(msgEl);
         msgBox.scrollTop = msgBox.scrollHeight;
+        console.log('[DEBUG] Message appended to UI');
     }
 
     displaySystemMessage(msg) {
@@ -258,7 +348,7 @@ class MQTTChat {
         
         const msgEl = document.createElement('div');
         msgEl.className = 'msg-item msg-system';
-        msgEl.innerHTML = `<div class="msg-meta" style="text-align:center;color:#999;">${msg}</div>`;
+        msgEl.innerHTML = `<div class="msg-meta" style="text-align:center;color:#999;font-size:11px;">${msg}</div>`;
         msgBox.appendChild(msgEl);
         msgBox.scrollTop = msgBox.scrollHeight;
     }
@@ -295,7 +385,7 @@ class MQTTChat {
             btn.innerText = '✅';
             setTimeout(() => { btn.innerText = originalText; }, 1500);
         }).catch(err => {
-            console.error('[MQTT] Copy failed:', err);
+            console.error('[DEBUG] Copy failed:', err);
         });
     }
 }
