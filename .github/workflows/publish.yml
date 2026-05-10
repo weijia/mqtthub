@@ -44,6 +44,8 @@ jobs:
           retention-days: 1
 
   # WebDAV 上传（push 和 tag 都触发）
+  # push → online/mqtthub/
+  # tag  → online/mqtthub/release/
   webdav-publish:
     needs: build
     runs-on: ubuntu-latest
@@ -55,13 +57,25 @@ jobs:
           name: dist
           path: ./dist
 
+      - name: Determine WebDAV target path
+        id: target
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "root=online/mqtthub/release" >> $GITHUB_OUTPUT
+            echo "info=Tag detected, deploying to release directory"
+          else
+            echo "root=online/mqtthub" >> $GITHUB_OUTPUT
+            echo "info=Branch push, deploying to main directory"
+          fi
+          echo "::notice::${{ steps.target.outputs.info }}"
+
       - name: Upload to WebDAV
         uses: weijia/action-upload-webdav@master
         with:
           webdav-url: ${{ secrets.WEBDAV_URL }}
           webdav-username: ${{ secrets.WEBDAV_USERNAME }}
           webdav-password: ${{ secrets.WEBDAV_PASSWORD }}
-          webdav-root: online/mqtthub
+          webdav-root: ${{ steps.target.outputs.root }}
           source-directory: ./dist
 
   # GitHub Pages 发布（仅 tag 触发）
@@ -70,7 +84,6 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
-    # GitHub Pages 部署权限
     permissions:
       pages: write
       id-token: write
