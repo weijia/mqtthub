@@ -1,5 +1,11 @@
-import './chat.css';
 import MQTTChat from './chat.js';
+
+// 动态注入 CSS
+const cssUrl = new URL('./chat.css', import.meta.url).href;
+const link = document.createElement('link');
+link.rel = 'stylesheet';
+link.href = cssUrl;
+document.head.appendChild(link);
 
 // 确保只初始化一次
 let chatInstance = null;
