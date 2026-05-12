@@ -1,18 +1,30 @@
 import { defineConfig } from 'vite';
+import { execSync } from 'child_process';
+
+// 获取 git 标签
+function getGitTag() {
+    try {
+        return execSync('git describe --tags --always', { encoding: 'utf-8' }).trim();
+    } catch {
+        return 'dev';
+    }
+}
 
 export default defineConfig({
-  base: './',
-  build: {
-    outDir: 'dist',
-    emptyOutDir: true,
-    // 将 CSS 内联到 JS 中，避免 MIME 类型问题
-    cssCodeSplit: false,
-    rollupOptions: {
-      output: {
-        // 内联所有 CSS
-        inlineDynamicImports: true,
-        assetFileNames: 'assets/[name]-[hash][extname]',
-      }
+    base: './',
+    define: {
+        'import.meta.env.VITE_APP_VERSION': JSON.stringify(getGitTag()),
+        'import.meta.env.VITE_APP_BUILD_TIME': JSON.stringify(new Date().toISOString()),
+    },
+    build: {
+        outDir: 'dist',
+        emptyOutDir: true,
+        cssCodeSplit: false,
+        rollupOptions: {
+            output: {
+                inlineDynamicImports: true,
+                assetFileNames: 'assets/[name]-[hash][extname]',
+            }
+        }
     }
-  }
 });

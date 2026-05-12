@@ -1,5 +1,6 @@
 import CryptoJS from 'crypto-js';
 import mqtt from 'mqtt';
+import { getFullVersion } from './version.js';
 
 // 预设 Broker 列表
 const PRESET_BROKERS = [
@@ -49,6 +50,7 @@ class MQTTChat {
                 <span id="gear-icon">⚙️</span>
             </div>
             <div id="mqtt-config-panel">
+                <div class="version-info">版本: ${getFullVersion()}</div>
                 <label class="cfg-label">Broker (支持下拉)</label>
                 <input type="text" id="cfg-broker" list="broker-list" value="${this.config.broker}">
                 <datalist id="broker-list">${PRESET_BROKERS.map(b => `<option value="${b}">`).join('')}</datalist>

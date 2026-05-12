@@ -79,6 +79,7 @@ const CHAT_CSS = `
 #send-btn:hover { opacity: 0.9; }
 .status-dot { width: 8px; height: 8px; background: #bdc3c7; border-radius: 50%; display: inline-block; transition: background 0.3s; }
 .status-online { background: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
+.version-info { font-size: 10px; color: #999; text-align: center; margin-bottom: 10px; padding: 4px; background: #f0f0f0; border-radius: 4px; }
 #mqtt-msgs::-webkit-scrollbar, #mqtt-config-panel::-webkit-scrollbar { width: 6px; }
 #mqtt-msgs::-webkit-scrollbar-track, #mqtt-config-panel::-webkit-scrollbar { background: transparent; }
 #mqtt-msgs::-webkit-scrollbar-thumb, #mqtt-config-panel::-webkit-scrollbar { background: #ccc; border-radius: 3px; }
