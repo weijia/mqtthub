@@ -14,6 +14,11 @@ const CHAT_CSS = `
     border: 1px solid #e0e0e0;
     overflow: hidden;
     transition: all 0.3s ease;
+    resize: both;
+    min-width: 280px;
+    min-height: 300px;
+    max-width: 90vw;
+    max-height: 90vh;
 }
 #mqtt-chat.fullscreen {
     top: 0 !important;
@@ -23,6 +28,7 @@ const CHAT_CSS = `
     width: 100% !important;
     height: 100% !important;
     border-radius: 0;
+    resize: none;
 }
 #mqtt-header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -73,7 +79,7 @@ const CHAT_CSS = `
 .msg-right .msg-bubble { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom-right-radius: 2px; }
 .msg-system .msg-meta { color: #999; }
 #mqtt-input-area { display: flex; flex-direction: column; border-top: 1px solid #eee; padding: 10px; background: #fff; gap: 8px; }
-#mqtt-input { width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; font-size: 13px; outline: none; resize: none; font-family: inherit; min-height: 40px; max-height: 120px; line-height: 1.4; box-sizing: border-box; }
+#mqtt-input { width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; font-size: 13px; outline: none; resize: vertical; font-family: inherit; min-height: 40px; max-height: 200px; line-height: 1.4; box-sizing: border-box; }
 #mqtt-input:focus { border-color: #667eea; }
 #send-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-size: 13px; align-self: flex-end; }
 #send-btn:hover { opacity: 0.9; }
