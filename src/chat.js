@@ -167,8 +167,17 @@ class MQTTChat {
         }
 
         const statusDot = document.getElementById('mqtt-status');
+        const channelEl = document.getElementById('mqtt-channel');
+        
         if (statusDot) {
             statusDot.className = 'status-dot';
+        }
+        
+        // 显示正在连接的服务器
+        if (channelEl) {
+            const brokerName = this.config.broker.replace(/^wss?:\/\//, '').split('/')[0];
+            channelEl.textContent = `连接中: ${brokerName}...`;
+            channelEl.style.color = '#f39c12';
         }
 
         try {
@@ -182,8 +191,16 @@ class MQTTChat {
             this.client.on('connect', () => {
                 const status = document.getElementById('mqtt-status');
                 if (status) status.className = 'status-dot status-online';
+                
+                // 显示已连接的服务器和频道
+                if (channelEl) {
+                    const brokerName = this.config.broker.replace(/^wss?:\/\//, '').split('/')[0];
+                    channelEl.textContent = `${brokerName} | ${this.config.topic}`;
+                    channelEl.style.color = 'rgba(255, 255, 255, 0.7)';
+                }
+                
                 this.client.subscribe(this.config.topic, { qos: 1 });
-                this.displaySystemMessage('✅ 已连接到服务器');
+                this.displaySystemMessage(`✅ 已连接到 ${this.config.broker}`);
             });
 
             this.client.on('message', (topic, payload) => {
@@ -193,14 +210,33 @@ class MQTTChat {
             this.client.on('close', () => {
                 const status = document.getElementById('mqtt-status');
                 if (status) status.className = 'status-dot';
+                if (channelEl) {
+                    channelEl.textContent = '已断开';
+                    channelEl.style.color = '#e74c3c';
+                }
             });
 
             this.client.on('error', (err) => {
                 this.displaySystemMessage('❌ 连接错误: ' + err.message);
+                if (channelEl) {
+                    channelEl.textContent = '连接失败';
+                    channelEl.style.color = '#e74c3c';
+                }
+            });
+
+            this.client.on('reconnect', () => {
+                if (channelEl) {
+                    channelEl.textContent = '重新连接中...';
+                    channelEl.style.color = '#f39c12';
+                }
             });
 
         } catch (err) {
             console.error('[MQTT] Connection failed:', err);
+            if (channelEl) {
+                channelEl.textContent = '连接异常';
+                channelEl.style.color = '#e74c3c';
+            }
         }
     }
 
