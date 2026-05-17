@@ -38,11 +38,11 @@ gh repo create mqtthub --public
 ```cmd
 :: Windows 命令格式
 set PROJ=mqtthub
-set USERNAME=weijia
+set USERNAME=xxx
 set ROOT=%USERNAME%/%PROJ%
 set WEBDAV_PASSWORD=【你的密码】
 set WEBDAV_USERNAME=【你的用户名】
-set WEBDAV_URL=https://miya.teracloud.jp/dav/
+set WEBDAV_URL=https://xxx.teracloud.jp/dav/
 
 gh secret set WEBDAV_URL --repo %ROOT% --body %WEBDAV_URL%
 gh secret set WEBDAV_USERNAME --repo %ROOT% --body %WEBDAV_USERNAME%
