@@ -1,0 +1,113 @@
+[Command]
+Name=Send to MQTT
+Command="
+    python:
+    import json, time, os, traceback, copyq_lib, hashlib, base64, ssl
+
+    try:
+        # ===== 配置（与 MQTT Hub 网页端保持一致） =====
+        BROKER_URL = 'wss://broker.emqx.io:8084/mqtt'
+        TOPIC = 'secure/mqtthub/chat/2026'
+        PASSWORD = 'Your_Secret_Password'
+        USER_NAME = 'CopyQ'
+
+        # ===== 获取剪贴板内容 =====
+        data = copyq_lib.get_copyq_data()
+        text = ''
+        if isinstance(data, dict):
+            text = data.get('text', '') or data.get('application/json', '')
+        elif isinstance(data, str):
+            text = data
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    text += item.get('text', '') or item.get('application/json', '') or ''
+                elif isinstance(item, str):
+                    text += item
+
+        if not text.strip():
+            copyq_lib.pop_up('剪贴板为空')
+            exit(0)
+
+        # ===== AES-256-CBC 加密（兼容 CryptoJS） =====
+        def evp_kdf(password, salt, key_len=32, iv_len=16):
+            \"\"\"OpenSSL EVP_BytesToKey，与 CryptoJS 密钥派生一致\"\"\"
+            d = b''
+            d_i = b''
+            while len(d) < key_len + iv_len:
+                d_i = hashlib.md5(d_i + password + salt).digest()
+                d += d_i
+            return d[:key_len], d[key_len:key_len + iv_len]
+
+        def pkcs7_pad(data):
+            pad_len = 16 - (len(data) % 16)
+            return data + bytes([pad_len] * pad_len)
+
+        def aes_encrypt(plaintext, password):
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+            salt = os.urandom(8)
+            key, iv = evp_kdf(password.encode('utf-8'), salt)
+            padded = pkcs7_pad(plaintext.encode('utf-8'))
+            cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+            encrypted = cipher.encryptor().update(padded) + cipher.encryptor().finalize()
+            return base64.b64encode(b'Salted__' + salt + encrypted).decode('utf-8')
+
+        # ===== 构建消息 =====
+        client_id = 'cq_' + os.urandom(4).hex()
+        msg_id = str(int(time.time() * 1000)) + '_' + os.urandom(4).hex()
+
+        payload = json.dumps({
+            'id': client_id,
+            'msgId': msg_id,
+            'user': USER_NAME,
+            'msg': text.strip(),
+            'time': int(time.time() * 1000)
+        }, ensure_ascii=False)
+
+        cipher = aes_encrypt(payload, PASSWORD)
+
+        # ===== MQTT 发送 =====
+        import paho.mqtt.client as mqtt
+
+        sent = [False]
+
+        def on_connect(client, userdata, flags, rc, properties=None):
+            if rc == 0:
+                client.publish(TOPIC, cipher, qos=1)
+
+        def on_publish(client, userdata, mid, rc=None, properties=None):
+            sent[0] = True
+            client.disconnect()
+
+        url_part = BROKER_URL.split('://')[1]
+        host_port = url_part.split('/')[0]
+        host = host_port.split(':')[0]
+        port = int(host_port.split(':')[1]) if ':' in host_port else 8084
+
+        client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+            transport='websockets',
+            protocol=mqtt.MQTTv311
+        )
+        client.tls_set_context(ssl.create_default_context())
+        client.on_connect = on_connect
+        client.on_publish = on_publish
+        client.connect(host, port, 60)
+        client.loop_start()
+        time.sleep(5)
+        client.loop_stop()
+
+        if sent[0]:
+            copyq_lib.pop_up(f'MQTT 已发送 ({len(text)} 字符)')
+        else:
+            copyq_lib.pop_up('MQTT 发送超时')
+
+    except ImportError as e:
+        copyq_lib.pop_up(f'缺少依赖: {e}\\n请安装: pip install paho-mqtt cryptography')
+    except Exception as e:
+        copyq_lib.log(traceback.format_exc())
+        copyq_lib.pop_up(f'发送失败: {str(e)[:80]}')
+    "
+IsGlobalShortcut=true
+Icon=\xf15b
+GlobalShortcut=ctrl+alt+m

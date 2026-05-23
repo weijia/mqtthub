@@ -63,6 +63,10 @@ const CHAT_CSS = `
 .cfg-label { font-size: 11px; color: #666; margin-bottom: 4px; display: block; font-weight: 500; }
 #mqtt-config-panel input { width: 100%; margin-bottom: 10px; padding: 8px 10px; font-size: 13px; border: 1px solid #ddd; border-radius: 6px; outline: none; box-sizing: border-box; }
 #mqtt-config-panel input:focus { border-color: #667eea; }
+.password-field { display: flex; gap: 6px; margin-bottom: 10px; }
+.password-field input { flex: 1; margin-bottom: 0; }
+.password-field button { background: none; border: 1px solid #ddd; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 14px; }
+.password-field button:hover { background: #f0f0f0; }
 .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; padding: 10px; cursor: pointer; width: 100%; margin-top: 5px; font-size: 13px; font-weight: 500; }
 .btn-primary:hover { opacity: 0.9; }
 #mqtt-msgs { flex: 1; overflow-y: auto; padding: 12px; font-size: 13px; background: #fafafa; }

@@ -57,7 +57,10 @@ class MQTTChat {
                 <label class="cfg-label">频道 Topic</label>
                 <input type="text" id="cfg-topic" value="${this.config.topic}">
                 <label class="cfg-label">AES 密码 (所有用户必须相同)</label>
-                <input type="password" id="cfg-pass" value="${this.config.password}">
+                <div class="password-field">
+                    <input type="password" id="cfg-pass" value="${this.config.password}">
+                    <button type="button" id="toggle-pass" title="显示/隐藏密码">👁️</button>
+                </div>
                 <button class="btn-primary" id="save-config">应用并重连</button>
             </div>
             <div id="mqtt-body">
@@ -93,6 +96,19 @@ class MQTTChat {
         gearIcon.addEventListener('click', (e) => {
             e.stopPropagation();
             main.querySelector('#mqtt-config-panel').classList.toggle('show');
+        });
+
+        // 密码显示/隐藏
+        main.querySelector('#toggle-pass').addEventListener('click', () => {
+            const passInput = main.querySelector('#cfg-pass');
+            const btn = main.querySelector('#toggle-pass');
+            if (passInput.type === 'password') {
+                passInput.type = 'text';
+                btn.textContent = '🙈';
+            } else {
+                passInput.type = 'password';
+                btn.textContent = '👁️';
+            }
         });
 
         // 保存配置
