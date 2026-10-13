@@ -49,6 +49,7 @@ class MQTTChat {
         this.client = null;
         this.clientId = 'mq_' + Math.random().toString(16).slice(2, 8);
         this.pendingMessages = new Set();
+        this.seenMessages = new Set();   // 已展示消息的密文哈希，用于订阅多条导致的重复去重
 
         console.log('[MQTT Chat] Initializing with clientId:', this.clientId);
         this.init();
@@ -446,7 +447,12 @@ class MQTTChat {
                     channelEl.style.color = 'rgba(255, 255, 255, 0.7)';
                 }
 
-                this.client.subscribe(this.config.topic, { qos: 1 });
+                // 订阅 topic 本身及其所有子路径
+                // （MQTT 通配符 # 按 spec 也应匹配 topic 本身，但部分 broker 行为不一致，
+                //   所以同时订阅 [t, t/#] 两条；重复消息由 handleMessage 去重）
+                const t = this.config.topic.replace(/\/+$/, '');
+                const topics = t.includes('#') || t.includes('+') ? [t] : [t, t + '/#'];
+                this.client.subscribe(topics, { qos: 1 });
                 this.displaySystemMessage(`✅ 已连接到 ${this.config.broker}`);
             });
 
@@ -489,6 +495,12 @@ class MQTTChat {
 
     handleMessage(encryptedData) {
         try {
+            // 同一密文可能因订阅 [t, t/#] 两条而被收到两次，按密文哈希去重
+            const sig = CryptoJS.MD5(encryptedData).toString();
+            if (this.seenMessages.has(sig)) return;
+            this.seenMessages.add(sig);
+            setTimeout(() => this.seenMessages.delete(sig), 10000);
+
             const bytes = CryptoJS.AES.decrypt(encryptedData, this.config.password);
             const raw = bytes.toString(CryptoJS.enc.Utf8);
             if (!raw) return;
