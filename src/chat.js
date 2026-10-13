@@ -125,7 +125,7 @@ class MQTTChat {
                 <datalist id="broker-list">${PRESET_BROKERS.map(b => `<option value="${b}">`).join('')}</datalist>
                 <label class="cfg-label">频道 Topic</label>
                 <input type="text" id="cfg-topic" value="${this.escapeAttr(this.config.topic)}">
-                <label class="cfg-label">AES 密码 (所有用户必须相同)</label>
+                <label class="cfg-label">AES 密码 (所有用户必须相同，留空则不加密)</label>
                 <div class="password-field">
                     <input type="password" id="cfg-pass" value="${this.escapeAttr(this.config.password)}">
                     <button type="button" id="toggle-pass" title="显示/隐藏密码">👁️</button>
@@ -493,16 +493,18 @@ class MQTTChat {
         }
     }
 
-    handleMessage(encryptedData) {
+    handleMessage(rawData) {
         try {
             // 同一密文可能因订阅 [t, t/#] 两条而被收到两次，按密文哈希去重
-            const sig = CryptoJS.MD5(encryptedData).toString();
+            const sig = CryptoJS.MD5(rawData).toString();
             if (this.seenMessages.has(sig)) return;
             this.seenMessages.add(sig);
             setTimeout(() => this.seenMessages.delete(sig), 10000);
 
-            const bytes = CryptoJS.AES.decrypt(encryptedData, this.config.password);
-            const raw = bytes.toString(CryptoJS.enc.Utf8);
+            // 密码为空则按明文解析，否则 AES 解密
+            const raw = this.config.password
+                ? CryptoJS.AES.decrypt(rawData, this.config.password).toString(CryptoJS.enc.Utf8)
+                : rawData;
             if (!raw) return;
 
             const data = JSON.parse(raw);
@@ -526,10 +528,14 @@ class MQTTChat {
             time: Date.now()
         };
 
-        const cipher = CryptoJS.AES.encrypt(JSON.stringify(payload), this.config.password).toString();
+        // 密码为空则不加密，直接发 JSON 明文
+        const json = JSON.stringify(payload);
+        const out = this.config.password
+            ? CryptoJS.AES.encrypt(json, this.config.password).toString()
+            : json;
 
         // 检查长度
-        if (cipher.length > 60000) {
+        if (out.length > 60000) {
             this.displaySystemMessage('⚠️ 消息过长');
             return;
         }
@@ -537,7 +543,7 @@ class MQTTChat {
         this.pendingMessages.add(msgId);
         setTimeout(() => this.pendingMessages.delete(msgId), 5000);
 
-        this.client.publish(this.config.topic, cipher, { qos: 1 });
+        this.client.publish(this.config.topic, out, { qos: 1 });
         this.displayMessage('我', msg, true);
     }
 
