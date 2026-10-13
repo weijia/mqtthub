@@ -82,6 +82,8 @@ const CHAT_CSS = `
 .msg-right .bubble-container { flex-direction: row-reverse; }
 .msg-right .msg-bubble { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom-right-radius: 2px; }
 .msg-system .msg-meta { color: #999; }
+.msg-extra { font-size: 11px; color: #888; margin-top: 4px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.msg-right .msg-extra { margin-left: auto; }
 #mqtt-input-area { display: flex; flex-direction: column; border-top: 1px solid #eee; padding: 10px; background: #fff; gap: 8px; }
 #mqtt-input { width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; font-size: 13px; outline: none; resize: vertical; font-family: inherit; min-height: 40px; max-height: 200px; line-height: 1.4; box-sizing: border-box; }
 #mqtt-input:focus { border-color: #667eea; }

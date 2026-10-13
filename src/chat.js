@@ -9,6 +9,9 @@ const PRESET_BROKERS = [
     'wss://broker.hivemq.com:8884/mqtt'
 ];
 
+// 消息协议已知字段，其余字段视为扩展字段并额外显示
+const KNOWN_FIELDS = ['id', 'msgId', 'user', 'msg', 'time'];
+
 // 多组配置存储键
 const STORAGE_KEY = 'mqtt_chat_configs';
 const ACTIVE_KEY = 'mqtt_chat_active';
@@ -511,7 +514,14 @@ class MQTTChat {
             if (data.id === this.clientId) return;
             if (data.msgId && this.pendingMessages.has(data.msgId)) return;
 
-            this.displayMessage(data.user, data.msg, false);
+            // 提取除已知字段外的其他字段
+            const extra = {};
+            for (const k of Object.keys(data)) {
+                if (!KNOWN_FIELDS.includes(k)) extra[k] = data[k];
+            }
+            const hasExtra = Object.keys(extra).length > 0;
+
+            this.displayMessage(data.user, data.msg, false, hasExtra ? extra : null);
         } catch (e) {
             console.warn('[MQTT] Failed to process message');
         }
@@ -547,7 +557,7 @@ class MQTTChat {
         this.displayMessage('我', msg, true);
     }
 
-    displayMessage(user, msg, isSelf) {
+    displayMessage(user, msg, isSelf, extra) {
         const msgBox = document.getElementById('mqtt-msgs');
         if (!msgBox) return;
 
@@ -555,12 +565,23 @@ class MQTTChat {
         msgEl.className = `msg-item ${isSelf ? 'msg-right' : 'msg-left'}`;
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+        // 扩展字段：气泡下方逐行显示 key: value
+        let extraHtml = '';
+        if (extra) {
+            const lines = Object.entries(extra).map(([k, v]) => {
+                const val = typeof v === 'string' ? v : JSON.stringify(v);
+                return `${this.escapeHtml(k)}: ${this.escapeHtml(String(val))}`;
+            });
+            extraHtml = `<div class="msg-extra">${lines.join('<br>')}</div>`;
+        }
+
         msgEl.innerHTML = `
             <div class="msg-meta">${user} · ${time}</div>
             <div class="bubble-container">
                 <div class="msg-bubble">${this.escapeHtml(msg).replace(/\n/g, '<br>')}</div>
                 <button class="copy-btn" title="复制">📋</button>
             </div>
+            ${extraHtml}
         `;
 
         msgEl.querySelector('.copy-btn').onclick = () => {
