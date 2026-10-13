@@ -94,6 +94,27 @@ const CHAT_CSS = `
 #mqtt-msgs::-webkit-scrollbar-track, #mqtt-config-panel::-webkit-scrollbar { background: transparent; }
 #mqtt-msgs::-webkit-scrollbar-thumb, #mqtt-config-panel::-webkit-scrollbar { background: #ccc; border-radius: 3px; }
 #mqtt-msgs::-webkit-scrollbar-thumb:hover { background: #999; }
+
+/* 配置组下拉行 */
+.cfg-list-row { display: flex; gap: 6px; margin-bottom: 10px; }
+.cfg-list-row select { flex: 1; padding: 8px 10px; font-size: 13px; border: 1px solid #ddd; border-radius: 6px; outline: none; box-sizing: border-box; background: #fff; }
+.cfg-list-row select:focus { border-color: #667eea; }
+.btn-small { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; color: #555; transition: all 0.2s; }
+.btn-small:hover { background: #f0f0f0; border-color: #bbb; }
+
+/* 配置面板操作按钮行 */
+.cfg-actions { display: flex; gap: 6px; margin-top: 5px; }
+.cfg-actions .btn-secondary { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; cursor: pointer; font-size: 13px; color: #555; flex: 0 0 auto; }
+.cfg-actions .btn-secondary:hover { background: #f0f0f0; }
+.cfg-actions .btn-primary { margin-top: 0; flex: 1; }
+
+/* 导出/导入面板 */
+.cfg-io { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ddd; }
+#cfg-io-text { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 12px; border: 1px solid #ddd; border-radius: 6px; outline: none; resize: vertical; min-height: 60px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.4; }
+#cfg-io-text:focus { border-color: #667eea; }
+.cfg-io-actions { display: flex; gap: 6px; margin-top: 6px; }
+.cfg-io-actions .btn-small { flex: 1; text-align: center; }
+.cfg-hint { font-size: 11px; color: #e67e22; margin-top: 6px; }
 `;
 
 // 注入样式

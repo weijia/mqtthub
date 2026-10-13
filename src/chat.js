@@ -9,23 +9,47 @@ const PRESET_BROKERS = [
     'wss://broker.hivemq.com:8884/mqtt'
 ];
 
-// 获取保存的配置
-const getSavedConfig = () => {
-    const saved = localStorage.getItem('mqtt_chat_config');
-    return saved ? JSON.parse(saved) : {
-        broker: PRESET_BROKERS[0],
-        topic: 'secure/mqtthub/chat/2026',
-        password: 'Your_Secret_Password'
-    };
+// 多组配置存储键
+const STORAGE_KEY = 'mqtt_chat_configs';
+const ACTIVE_KEY = 'mqtt_chat_active';
+
+// 读取所有配置组（兼容旧版单组 mqtt_chat_config）
+const loadConfigs = () => {
+    let arr;
+    try {
+        arr = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    } catch { arr = null; }
+    if (!Array.isArray(arr) || arr.length === 0) {
+        let legacy = null;
+        try {
+            const old = localStorage.getItem('mqtt_chat_config');
+            legacy = old ? JSON.parse(old) : null;
+        } catch {}
+        arr = [{
+            name: '默认',
+            broker: legacy?.broker || PRESET_BROKERS[0],
+            topic: legacy?.topic || 'secure/mqtthub/chat/2026',
+            password: legacy?.password || 'Your_Secret_Password'
+        }];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+    }
+    return arr;
+};
+
+// 获取当前激活的配置
+const getActiveConfig = (configs) => {
+    const activeName = localStorage.getItem(ACTIVE_KEY);
+    return configs.find(c => c.name === activeName) || configs[0];
 };
 
 class MQTTChat {
     constructor() {
-        this.config = getSavedConfig();
+        this.configs = loadConfigs();
+        this.config = getActiveConfig(this.configs);
         this.client = null;
         this.clientId = 'mq_' + Math.random().toString(16).slice(2, 8);
         this.pendingMessages = new Set();
-        
+
         console.log('[MQTT Chat] Initializing with clientId:', this.clientId);
         this.init();
     }
@@ -34,6 +58,43 @@ class MQTTChat {
         this.createUI();
         this.bindEvents();
         setTimeout(() => this.connect(), 100);
+    }
+
+    saveConfigs() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.configs));
+        localStorage.setItem(ACTIVE_KEY, this.config.name);
+    }
+
+    // 序列化配置为明文字符串：key=value&...（值用 URL 编码，通用格式）
+    serializeConfig(cfg) {
+        return ['name', 'broker', 'topic', 'password']
+            .map(k => `${k}=${encodeURIComponent(cfg[k] || '')}`)
+            .join('&');
+    }
+
+    // 从字符串解析配置（容忍多余空格、未知字段）
+    parseConfig(str) {
+        const cfg = {};
+        for (const p of str.trim().split('&')) {
+            const idx = p.indexOf('=');
+            if (idx < 0) continue;
+            const k = p.slice(0, idx).trim();
+            const v = decodeURIComponent(p.slice(idx + 1));
+            cfg[k] = v;
+        }
+        if (!cfg.broker || !cfg.topic) return null;
+        if (!cfg.name) {
+            cfg.name = cfg.broker.replace(/^wss?:\/\//, '').split('/')[0];
+        }
+        return cfg;
+    }
+
+    renderConfigList() {
+        const sel = document.getElementById('cfg-list');
+        if (!sel) return;
+        sel.innerHTML = this.configs.map(c =>
+            `<option value="${this.escapeAttr(c.name)}"${c.name === this.config.name ? ' selected' : ''}>${this.escapeAttr(c.name)}</option>`
+        ).join('');
     }
 
     createUI() {
@@ -46,22 +107,42 @@ class MQTTChat {
         main.innerHTML = `
             <div id="mqtt-header">
                 <span id="mqtt-title"><span id="mqtt-status" class="status-dot"></span>MQTT Hub</span>
-                <span id="mqtt-channel">${this.config.topic}</span>
+                <span id="mqtt-channel">${this.escapeAttr(this.config.topic)}</span>
                 <span id="gear-icon">⚙️</span>
             </div>
             <div id="mqtt-config-panel">
                 <div class="version-info">版本: ${getFullVersion()}</div>
+                <label class="cfg-label">配置组</label>
+                <div class="cfg-list-row">
+                    <select id="cfg-list"></select>
+                    <button type="button" class="btn-small" id="cfg-new" title="新建">＋</button>
+                    <button type="button" class="btn-small" id="cfg-rename" title="重命名">✎</button>
+                    <button type="button" class="btn-small" id="cfg-delete" title="删除">🗑</button>
+                </div>
                 <label class="cfg-label">Broker (支持下拉)</label>
-                <input type="text" id="cfg-broker" list="broker-list" value="${this.config.broker}">
+                <input type="text" id="cfg-broker" list="broker-list" value="${this.escapeAttr(this.config.broker)}">
                 <datalist id="broker-list">${PRESET_BROKERS.map(b => `<option value="${b}">`).join('')}</datalist>
                 <label class="cfg-label">频道 Topic</label>
-                <input type="text" id="cfg-topic" value="${this.config.topic}">
+                <input type="text" id="cfg-topic" value="${this.escapeAttr(this.config.topic)}">
                 <label class="cfg-label">AES 密码 (所有用户必须相同)</label>
                 <div class="password-field">
-                    <input type="password" id="cfg-pass" value="${this.config.password}">
+                    <input type="password" id="cfg-pass" value="${this.escapeAttr(this.config.password)}">
                     <button type="button" id="toggle-pass" title="显示/隐藏密码">👁️</button>
                 </div>
-                <button class="btn-primary" id="save-config">应用并重连</button>
+                <div class="cfg-actions">
+                    <button type="button" class="btn-secondary" id="cfg-export">导出</button>
+                    <button type="button" class="btn-secondary" id="cfg-import">导入</button>
+                    <button type="button" class="btn-primary" id="save-config">应用并重连</button>
+                </div>
+                <div id="cfg-io" class="cfg-io" style="display:none">
+                    <textarea id="cfg-io-text" rows="3" placeholder="name=...&broker=...&topic=...&password=..."></textarea>
+                    <div class="cfg-io-actions">
+                        <button type="button" class="btn-small" id="cfg-io-copy">复制</button>
+                        <button type="button" class="btn-small" id="cfg-io-load">解析并加入</button>
+                        <button type="button" class="btn-small" id="cfg-io-close">关闭</button>
+                    </div>
+                    <div class="cfg-hint" id="cfg-io-hint"></div>
+                </div>
             </div>
             <div id="mqtt-body">
                 <div id="mqtt-msgs"></div>
@@ -72,6 +153,7 @@ class MQTTChat {
             </div>
         `;
         document.body.appendChild(main);
+        this.renderConfigList();
     }
 
     bindEvents() {
@@ -111,12 +193,139 @@ class MQTTChat {
             }
         });
 
-        // 保存配置
+        // 切换配置组
+        const cfgList = main.querySelector('#cfg-list');
+        cfgList.addEventListener('change', () => {
+            const name = cfgList.value;
+            const found = this.configs.find(c => c.name === name);
+            if (!found) return;
+            this.config = found;
+            localStorage.setItem(ACTIVE_KEY, this.config.name);
+            this.fillConfigInputs();
+            main.querySelector('#mqtt-channel').textContent = this.config.topic;
+            this.connect();
+        });
+
+        // 新建配置组
+        main.querySelector('#cfg-new').addEventListener('click', () => {
+            const name = prompt('新配置名称：', '配置' + (this.configs.length + 1));
+            if (!name) return;
+            if (this.configs.find(c => c.name === name)) {
+                this.toast('名称已存在');
+                return;
+            }
+            const fresh = {
+                name,
+                broker: PRESET_BROKERS[0],
+                topic: 'secure/mqtthub/chat/2026',
+                password: 'Your_Secret_Password'
+            };
+            this.configs.push(fresh);
+            this.config = fresh;
+            this.saveConfigs();
+            this.renderConfigList();
+            this.fillConfigInputs();
+        });
+
+        // 重命名当前组
+        main.querySelector('#cfg-rename').addEventListener('click', () => {
+            const name = prompt('重命名当前配置：', this.config.name);
+            if (!name || name === this.config.name) return;
+            if (this.configs.find(c => c.name === name)) {
+                this.toast('名称已存在');
+                return;
+            }
+            this.config.name = name;
+            this.saveConfigs();
+            this.renderConfigList();
+        });
+
+        // 删除当前组
+        main.querySelector('#cfg-delete').addEventListener('click', () => {
+            if (this.configs.length <= 1) {
+                this.toast('至少保留一组配置');
+                return;
+            }
+            if (!confirm(`删除配置「${this.config.name}」？`)) return;
+            this.configs = this.configs.filter(c => c.name !== this.config.name);
+            this.config = this.configs[0];
+            this.saveConfigs();
+            this.renderConfigList();
+            this.fillConfigInputs();
+            this.connect();
+        });
+
+        // 导出：序列化当前组到文本框
+        main.querySelector('#cfg-export').addEventListener('click', () => {
+            this.collectInputsToConfig();
+            const str = this.serializeConfig(this.config);
+            const io = main.querySelector('#cfg-io');
+            const text = main.querySelector('#cfg-io-text');
+            const hint = main.querySelector('#cfg-io-hint');
+            io.style.display = '';
+            text.value = str;
+            text.readOnly = true;
+            hint.textContent = '⚠️ 此串包含 AES 密钥，请妥善保管';
+        });
+
+        // 导入：清空文本框等待粘贴
+        main.querySelector('#cfg-import').addEventListener('click', () => {
+            const io = main.querySelector('#cfg-io');
+            const text = main.querySelector('#cfg-io-text');
+            const hint = main.querySelector('#cfg-io-hint');
+            io.style.display = '';
+            text.value = '';
+            text.readOnly = false;
+            hint.textContent = '粘贴配置字符串后点「解析并加入」';
+            text.focus();
+        });
+
+        // 复制文本框内容
+        main.querySelector('#cfg-io-copy').addEventListener('click', async () => {
+            const text = main.querySelector('#cfg-io-text');
+            try {
+                await navigator.clipboard.writeText(text.value);
+                this.toast('已复制');
+            } catch {
+                text.select();
+                document.execCommand('copy');
+                this.toast('已复制');
+            }
+        });
+
+        // 解析并加入为新组
+        main.querySelector('#cfg-io-load').addEventListener('click', () => {
+            const text = main.querySelector('#cfg-io-text');
+            const str = text.value.trim();
+            if (!str) { this.toast('内容为空'); return; }
+            const cfg = this.parseConfig(str);
+            if (!cfg) { this.toast('解析失败：缺少 broker 或 topic'); return; }
+            // 重名自动加后缀
+            const baseName = cfg.name;
+            let n = 1;
+            while (this.configs.find(c => c.name === cfg.name)) {
+                cfg.name = `${baseName} (${++n})`;
+            }
+            this.configs.push(cfg);
+            this.config = cfg;
+            this.saveConfigs();
+            this.renderConfigList();
+            this.fillConfigInputs();
+            main.querySelector('#cfg-io').style.display = 'none';
+            this.connect();
+            this.toast(`已导入「${cfg.name}」`);
+        });
+
+        // 关闭导出/导入面板
+        main.querySelector('#cfg-io-close').addEventListener('click', () => {
+            main.querySelector('#cfg-io').style.display = 'none';
+        });
+
+        // 保存配置（应用并重连）
         saveBtn.addEventListener('click', () => {
-            this.config.broker = main.querySelector('#cfg-broker').value.trim();
-            this.config.topic = main.querySelector('#cfg-topic').value.trim();
-            this.config.password = main.querySelector('#cfg-pass').value.trim();
-            localStorage.setItem('mqtt_chat_config', JSON.stringify(this.config));
+            this.collectInputsToConfig();
+            this.saveConfigs();
+            this.renderConfigList();
             main.querySelector('#mqtt-config-panel').classList.remove('show');
             main.querySelector('#mqtt-channel').textContent = this.config.topic;
             this.connect();
@@ -134,6 +343,28 @@ class MQTTChat {
         sendBtn.addEventListener('click', () => {
             this.trySend();
         });
+    }
+
+    // 把当前输入框的值写回 this.config
+    collectInputsToConfig() {
+        const main = document.getElementById('mqtt-chat');
+        if (!main) return;
+        this.config.broker = main.querySelector('#cfg-broker').value.trim();
+        this.config.topic = main.querySelector('#cfg-topic').value.trim();
+        this.config.password = main.querySelector('#cfg-pass').value.trim();
+    }
+
+    // 用 this.config 填充输入框
+    fillConfigInputs() {
+        const main = document.getElementById('mqtt-chat');
+        if (!main) return;
+        main.querySelector('#cfg-broker').value = this.config.broker;
+        main.querySelector('#cfg-topic').value = this.config.topic;
+        main.querySelector('#cfg-pass').value = this.config.password;
+    }
+
+    toast(msg) {
+        this.displaySystemMessage(msg);
     }
 
     trySend() {
@@ -184,11 +415,11 @@ class MQTTChat {
 
         const statusDot = document.getElementById('mqtt-status');
         const channelEl = document.getElementById('mqtt-channel');
-        
+
         if (statusDot) {
             statusDot.className = 'status-dot';
         }
-        
+
         // 显示正在连接的服务器
         if (channelEl) {
             const brokerName = this.config.broker.replace(/^wss?:\/\//, '').split('/')[0];
@@ -207,14 +438,14 @@ class MQTTChat {
             this.client.on('connect', () => {
                 const status = document.getElementById('mqtt-status');
                 if (status) status.className = 'status-dot status-online';
-                
+
                 // 显示已连接的服务器和频道
                 if (channelEl) {
                     const brokerName = this.config.broker.replace(/^wss?:\/\//, '').split('/')[0];
                     channelEl.textContent = `${brokerName} | ${this.config.topic}`;
                     channelEl.style.color = 'rgba(255, 255, 255, 0.7)';
                 }
-                
+
                 this.client.subscribe(this.config.topic, { qos: 1 });
                 this.displaySystemMessage(`✅ 已连接到 ${this.config.broker}`);
             });
@@ -274,7 +505,7 @@ class MQTTChat {
 
     sendMessage(msg) {
         const msgId = Date.now() + '_' + Math.random().toString(16).slice(2, 6);
-        
+
         const payload = {
             id: this.clientId,
             msgId: msgId,
@@ -301,7 +532,7 @@ class MQTTChat {
     displayMessage(user, msg, isSelf) {
         const msgBox = document.getElementById('mqtt-msgs');
         if (!msgBox) return;
-        
+
         const msgEl = document.createElement('div');
         msgEl.className = `msg-item ${isSelf ? 'msg-right' : 'msg-left'}`;
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -313,7 +544,7 @@ class MQTTChat {
                 <button class="copy-btn" title="复制">📋</button>
             </div>
         `;
-        
+
         msgEl.querySelector('.copy-btn').onclick = () => {
             navigator.clipboard.writeText(msg);
             const btn = msgEl.querySelector('.copy-btn');
@@ -328,7 +559,7 @@ class MQTTChat {
     displaySystemMessage(msg) {
         const msgBox = document.getElementById('mqtt-msgs');
         if (!msgBox) return;
-        
+
         const msgEl = document.createElement('div');
         msgEl.className = 'msg-item msg-system';
         msgEl.innerHTML = `<div class="msg-meta" style="text-align:center;color:#999;font-size:11px;">${msg}</div>`;
@@ -340,6 +571,14 @@ class MQTTChat {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // 用于 HTML 属性值的转义
+    escapeAttr(text) {
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
     }
 }
 
